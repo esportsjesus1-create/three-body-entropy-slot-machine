@@ -1,0 +1,36 @@
+{
+  "name": "@three-body-entropy/session-state-machine",
+  "version": "1.0.0",
+  "description": "Game session state management with transitions and lifecycle handling for slot machine sessions",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "jest --coverage",
+    "test:watch": "jest --watch",
+    "lint": "eslint src/**/*.ts tests/**/*.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "state-machine",
+    "fsm",
+    "session",
+    "game",
+    "slot-machine"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "@types/node": "^20.11.0",
+    "@typescript-eslint/eslint-plugin": "^6.19.0",
+    "@typescript-eslint/parser": "^6.19.0",
+    "eslint": "^8.56.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.2",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "eventemitter3": "^5.0.1"
+  }
+}

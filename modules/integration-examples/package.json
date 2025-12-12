@@ -1,0 +1,36 @@
+{
+  "name": "@three-body-entropy/integration-examples",
+  "version": "1.0.0",
+  "description": "Sample implementations for 3-8 reel slot machines using Three-Body Entropy",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "jest",
+    "test:coverage": "jest --coverage",
+    "lint": "eslint src/**/*.ts tests/**/*.ts",
+    "run:3reel": "ts-node src/examples/three-reel.ts",
+    "run:8reel": "ts-node src/examples/eight-reel.ts",
+    "run:all": "ts-node src/examples/run-all.ts"
+  },
+  "keywords": [
+    "slot-machine",
+    "entropy",
+    "three-body",
+    "examples",
+    "integration"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "eventemitter3": "^5.0.1"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "@types/node": "^20.11.24",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  }
+}
