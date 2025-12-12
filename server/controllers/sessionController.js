@@ -10,6 +10,7 @@ import {
   generateHouseSeed,
   generateCommitment,
   mixEntropy,
+  generateTestModeEntropy,
   calculateSpinResult,
   generateProof,
   verifySpinResult
@@ -20,8 +21,12 @@ const SESSION_EXPIRY_MS = 5 * 60 * 1000;
 
 /**
  * Create a new spin session with commitment
+ * @param {Object} config - Configuration options
+ * @param {boolean} config.testMode - If true, indicates this is a test session (no client seed required)
  */
 export async function createSession(config = {}) {
+  const { testMode = false } = config;
+  
   // Generate house seed using three-body physics
   const { seed: houseSeed, physicsState, thetaAngles } = generateHouseSeed();
   
@@ -37,7 +42,8 @@ export async function createSession(config = {}) {
     houseSeed,
     physicsState,
     thetaAngles,
-    expiresAt
+    expiresAt,
+    testMode
   });
   
   // Cache in Redis for fast access
@@ -50,6 +56,7 @@ export async function createSession(config = {}) {
         id: session.id,
         commitment,
         houseSeed,
+        testMode,
         expiresAt: expiresAt.toISOString()
       })
     );
@@ -61,12 +68,16 @@ export async function createSession(config = {}) {
     sessionId: session.id,
     commitment,
     expiresAt: expiresAt.toISOString(),
-    createdAt: session.created_at
+    createdAt: session.created_at,
+    testMode
   };
 }
 
 /**
- * Reveal spin result with client seed
+ * Reveal spin result with optional client seed
+ * @param {string} sessionId - Session ID
+ * @param {string|null} clientSeed - Client seed (optional, null for test mode)
+ * @param {Object} config - Configuration options
  */
 export async function revealSession(sessionId, clientSeed, config = {}) {
   // Try to get from Redis first
@@ -91,6 +102,7 @@ export async function revealSession(sessionId, clientSeed, config = {}) {
       id: dbSession.id,
       commitment: dbSession.commitment,
       houseSeed: dbSession.house_seed,
+      testMode: dbSession.test_mode || false,
       expiresAt: dbSession.expires_at
     };
   }
@@ -109,23 +121,32 @@ export async function revealSession(sessionId, clientSeed, config = {}) {
   // Generate nonce (using session creation order)
   const nonce = Date.now();
   
-  // Mix entropy
-  const { entropyHex, physicsState, thetaAngles } = mixEntropy(
-    sessionData.houseSeed,
-    clientSeed,
-    nonce
-  );
+  // Determine if this is test mode (no client seed provided)
+  const testMode = !clientSeed || sessionData.testMode;
+  
+  // Generate entropy based on mode
+  let entropyResult;
+  if (testMode) {
+    // Test mode: use only house entropy
+    entropyResult = generateTestModeEntropy(sessionData.houseSeed, nonce);
+  } else {
+    // Production mode: mix client + house entropy
+    entropyResult = mixEntropy(sessionData.houseSeed, clientSeed, nonce);
+  }
+  
+  const { entropyHex, physicsState, thetaAngles } = entropyResult;
   
   // Calculate spin result
   const { grid } = calculateSpinResult(entropyHex, config);
   
-  // Generate proof
+  // Generate proof (with testMode flag)
   const proof = generateProof(
     sessionData.houseSeed,
     clientSeed,
     nonce,
     entropyHex,
-    sessionData.commitment
+    sessionData.commitment,
+    testMode
   );
   
   // Build result object
@@ -133,12 +154,13 @@ export async function revealSession(sessionId, clientSeed, config = {}) {
     grid,
     entropyHex,
     physicsState,
-    thetaAngles
+    thetaAngles,
+    testMode
   };
   
   // Update database
   await SpinSession.reveal(sessionId, {
-    clientSeed,
+    clientSeed: testMode ? null : clientSeed,
     result,
     proof
   });
@@ -159,7 +181,8 @@ export async function revealSession(sessionId, clientSeed, config = {}) {
     },
     houseSeed: sessionData.houseSeed,
     proof,
-    commitment: sessionData.commitment
+    commitment: sessionData.commitment,
+    testMode
   };
 }
 

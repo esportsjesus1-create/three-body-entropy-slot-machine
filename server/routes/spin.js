@@ -55,11 +55,12 @@ router.post('/commit',
  * POST /api/v1/spin/reveal
  * 
  * Reveal spin result by providing client seed
+ * If no clientSeed is provided, operates in test mode using only house entropy
  * 
  * Request Body:
  * {
  *   sessionId: string,
- *   clientSeed: string,
+ *   clientSeed?: string (optional - if omitted, uses test mode with house entropy only),
  *   config?: { symbols, reelCount, rowCount, etc. }
  * }
  * 
@@ -67,7 +68,8 @@ router.post('/commit',
  * {
  *   result: { grid, symbols },
  *   houseSeed: string,
- *   proof: { proofId, signature, ... }
+ *   proof: { proofId, signature, ... },
+ *   testMode: boolean
  * }
  */
 router.post('/reveal',
@@ -78,6 +80,7 @@ router.post('/reveal',
       .isUUID()
       .withMessage('sessionId must be a valid UUID'),
     body('clientSeed')
+      .optional()
       .isString()
       .isLength({ min: 16, max: 256 })
       .withMessage('clientSeed must be a string between 16 and 256 characters')
@@ -94,7 +97,7 @@ router.post('/reveal',
     }
 
     try {
-      const { sessionId, clientSeed, config = {} } = req.body;
+      const { sessionId, clientSeed = null, config = {} } = req.body;
       
       const result = await revealSession(sessionId, clientSeed, config);
       
@@ -144,10 +147,11 @@ router.post('/reveal',
  * 
  * Quick spin - combines commit and reveal in one request
  * Less secure but more convenient for testing
+ * If no clientSeed is provided, operates in test mode using only house entropy
  * 
  * Request Body:
  * {
- *   clientSeed: string,
+ *   clientSeed?: string (optional - if omitted, uses test mode),
  *   config?: { symbols, reelCount, rowCount, etc. }
  * }
  */
@@ -156,6 +160,7 @@ router.post('/quick',
   optionalAuth,
   [
     body('clientSeed')
+      .optional()
       .isString()
       .isLength({ min: 16, max: 256 })
       .withMessage('clientSeed must be a string between 16 and 256 characters')
@@ -171,10 +176,13 @@ router.post('/quick',
     }
 
     try {
-      const { clientSeed, config = {} } = req.body;
+      const { clientSeed = null, config = {} } = req.body;
       
-      // Create session
-      const session = await createSession(config);
+      // Determine if test mode
+      const testMode = !clientSeed;
+      
+      // Create session with test mode flag
+      const session = await createSession({ ...config, testMode });
       
       // Immediately reveal
       const result = await revealSession(session.sessionId, clientSeed, config);
@@ -183,7 +191,9 @@ router.post('/quick',
         success: true,
         data: {
           ...result,
-          warning: 'Quick spin is less secure. Use commit/reveal flow for production.'
+          warning: testMode 
+            ? 'Test mode: using house entropy only. Not suitable for production.'
+            : 'Quick spin is less secure. Use commit/reveal flow for production.'
         }
       });
     } catch (error) {

@@ -292,6 +292,13 @@ class SlotMachineRNGAdapter {
     return await hmacSha256(this.serverSecret, entropy.getStateString());
   }
 
+  async generateTestModeEntropy(nonce) {
+    const testSeed = `${this.currentServerSeed}:test:${nonce}`;
+    const entropy = new ThreeBodyEntropySource(testSeed);
+    entropy.simulate(3.0, 0.01);
+    return await hmacSha256(this.serverSecret, entropy.getStateString());
+  }
+
   async getRandomValue(entropyHex, position, max) {
     const expandedEntropy = await hmacSha256(entropyHex, `position:${position}`);
     const hexPart = expandedEntropy.substring(0, 8);
@@ -337,7 +344,7 @@ class SlotMachineRNGAdapter {
   }
 
   async generateSpinEntropy(request) {
-    const { clientSeed, nonce, options = {} } = request;
+    const { clientSeed = null, nonce, options = {} } = request;
     const { allowGold = true, allowBonus = true } = options;
 
     const commitment = this.commitments.get(nonce);
@@ -345,7 +352,10 @@ class SlotMachineRNGAdapter {
       throw new Error(`No commitment found for nonce ${nonce}. Call createCommitment() first.`);
     }
 
-    const entropyHex = await this.generateCombinedEntropy(clientSeed, nonce);
+    const testMode = !clientSeed;
+    const entropyHex = testMode 
+      ? await this.generateTestModeEntropy(nonce)
+      : await this.generateCombinedEntropy(clientSeed, nonce);
 
     const grid = [];
     const totalRows = this.config.rowCount + this.config.bufferRows;
@@ -378,16 +388,18 @@ class SlotMachineRNGAdapter {
     }
 
     const proofId = (await sha256(`${entropyHex}:${nonce}`)).substring(0, 32);
-    const signatureData = `${proofId}:${commitment.commitmentHash}:${clientSeed}:${nonce}`;
+    const seedForSignature = testMode ? 'test' : clientSeed;
+    const signatureData = `${proofId}:${commitment.commitmentHash}:${seedForSignature}:${nonce}`;
     const signature = await hmacSha256(this.serverSecret, signatureData);
 
     const proof = {
       proofId,
       serverSeed: this.currentServerSeed,
-      clientSeed,
+      clientSeed: testMode ? null : clientSeed,
       nonce,
       combinedHash: entropyHex,
       signature,
+      testMode,
       timestamp: Date.now()
     };
 
@@ -396,7 +408,8 @@ class SlotMachineRNGAdapter {
       symbols: this.flattenGridToSymbols(grid),
       proof,
       commitment,
-      entropyHex
+      entropyHex,
+      testMode
     };
   }
 
@@ -475,14 +488,17 @@ class SlotMachineRNGAdapter {
 
 /**
  * Static verification function
+ * Supports both production mode (with clientSeed) and test mode (without clientSeed)
  */
 async function verifySpinResult(result, serverSecret, config) {
   const errors = [];
+  const testMode = result.proof.testMode || result.testMode || false;
   const checks = {
     commitmentValid: false,
     entropyValid: false,
     signatureValid: false,
-    gridValid: false
+    gridValid: false,
+    testMode
   };
 
   const expectedCommitment = await sha256(result.proof.serverSeed);
@@ -491,7 +507,12 @@ async function verifySpinResult(result, serverSecret, config) {
     errors.push('Server seed does not match commitment hash');
   }
 
-  const combinedSeed = `${result.proof.serverSeed}:${result.proof.clientSeed}:${result.proof.nonce}`;
+  let combinedSeed;
+  if (testMode) {
+    combinedSeed = `${result.proof.serverSeed}:test:${result.proof.nonce}`;
+  } else {
+    combinedSeed = `${result.proof.serverSeed}:${result.proof.clientSeed}:${result.proof.nonce}`;
+  }
   const entropy = new ThreeBodyEntropySource(combinedSeed);
   entropy.simulate(3.0, 0.01);
   const expectedEntropy = await hmacSha256(serverSecret, entropy.getStateString());
@@ -501,7 +522,8 @@ async function verifySpinResult(result, serverSecret, config) {
     errors.push('Entropy hash does not match expected value');
   }
 
-  const signatureData = `${result.proof.proofId}:${result.commitment.commitmentHash}:${result.proof.clientSeed}:${result.proof.nonce}`;
+  const seedForSignature = testMode ? 'test' : result.proof.clientSeed;
+  const signatureData = `${result.proof.proofId}:${result.commitment.commitmentHash}:${seedForSignature}:${result.proof.nonce}`;
   const expectedSignature = await hmacSha256(serverSecret, signatureData);
   
   checks.signatureValid = expectedSignature === result.proof.signature;
@@ -517,7 +539,8 @@ async function verifySpinResult(result, serverSecret, config) {
   return {
     valid: checks.commitmentValid && checks.entropyValid && checks.signatureValid && checks.gridValid,
     checks,
-    errors
+    errors,
+    testMode
   };
 }
 

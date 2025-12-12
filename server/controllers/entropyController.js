@@ -212,7 +212,7 @@ export function generateCommitment(houseSeed) {
 }
 
 /**
- * Mix client and house entropy
+ * Mix client and house entropy (production mode)
  */
 export function mixEntropy(houseSeed, clientSeed, nonce) {
   const combinedSeed = `${houseSeed}:${clientSeed}:${nonce}`;
@@ -227,7 +227,30 @@ export function mixEntropy(houseSeed, clientSeed, nonce) {
   return {
     entropyHex,
     physicsState: simulation.getState(),
-    thetaAngles: calculateThetaAngles(simulation.getState())
+    thetaAngles: calculateThetaAngles(simulation.getState()),
+    testMode: false
+  };
+}
+
+/**
+ * Generate entropy from house seed only (test mode)
+ * Used when no client seed is provided for single-player testing
+ */
+export function generateTestModeEntropy(houseSeed, nonce) {
+  const testSeed = `${houseSeed}:test:${nonce}`;
+  const simulation = new ThreeBodySimulation(testSeed);
+  simulation.simulate(3.0, 0.01);
+  
+  const serverSecret = process.env.API_SECRET_KEY || 'default-secret';
+  const entropyHex = createHmac('sha256', serverSecret)
+    .update(simulation.getStateString())
+    .digest('hex');
+  
+  return {
+    entropyHex,
+    physicsState: simulation.getState(),
+    thetaAngles: calculateThetaAngles(simulation.getState()),
+    testMode: true
   };
 }
 
@@ -303,8 +326,9 @@ export function calculateSpinResult(entropyHex, config = {}) {
 
 /**
  * Generate cryptographic proof
+ * Supports both production mode (with clientSeed) and test mode (without clientSeed)
  */
-export function generateProof(houseSeed, clientSeed, nonce, entropyHex, commitment) {
+export function generateProof(houseSeed, clientSeed, nonce, entropyHex, commitment, testMode = false) {
   const serverSecret = process.env.API_SECRET_KEY || 'default-secret';
   
   const proofId = createHash('sha256')
@@ -312,7 +336,9 @@ export function generateProof(houseSeed, clientSeed, nonce, entropyHex, commitme
     .digest('hex')
     .substring(0, 32);
 
-  const signatureData = `${proofId}:${commitment}:${clientSeed}:${nonce}`;
+  // For test mode, use 'test' as the client seed marker in signature
+  const seedForSignature = testMode ? 'test' : clientSeed;
+  const signatureData = `${proofId}:${commitment}:${seedForSignature}:${nonce}`;
   const signature = createHmac('sha256', serverSecret)
     .update(signatureData)
     .digest('hex');
@@ -320,24 +346,28 @@ export function generateProof(houseSeed, clientSeed, nonce, entropyHex, commitme
   return {
     proofId,
     houseSeed,
-    clientSeed,
+    clientSeed: testMode ? null : clientSeed,
     nonce,
     entropyHex,
     signature,
+    testMode,
     timestamp: Date.now()
   };
 }
 
 /**
  * Verify a spin result
+ * Supports both production mode (with clientSeed) and test mode (without clientSeed)
  */
 export function verifySpinResult(proof, commitment, config = {}) {
   const serverSecret = process.env.API_SECRET_KEY || 'default-secret';
   const errors = [];
+  const testMode = proof.testMode || false;
   const checks = {
     commitmentValid: false,
     entropyValid: false,
-    signatureValid: false
+    signatureValid: false,
+    testMode
   };
 
   // Verify commitment
@@ -347,15 +377,23 @@ export function verifySpinResult(proof, commitment, config = {}) {
     errors.push('House seed does not match commitment');
   }
 
-  // Verify entropy
-  const { entropyHex: expectedEntropy } = mixEntropy(proof.houseSeed, proof.clientSeed, proof.nonce);
+  // Verify entropy - use appropriate function based on mode
+  let expectedEntropy;
+  if (testMode) {
+    const result = generateTestModeEntropy(proof.houseSeed, proof.nonce);
+    expectedEntropy = result.entropyHex;
+  } else {
+    const result = mixEntropy(proof.houseSeed, proof.clientSeed, proof.nonce);
+    expectedEntropy = result.entropyHex;
+  }
   checks.entropyValid = expectedEntropy === proof.entropyHex;
   if (!checks.entropyValid) {
     errors.push('Entropy does not match expected value');
   }
 
-  // Verify signature
-  const signatureData = `${proof.proofId}:${commitment}:${proof.clientSeed}:${proof.nonce}`;
+  // Verify signature - use 'test' marker for test mode
+  const seedForSignature = testMode ? 'test' : proof.clientSeed;
+  const signatureData = `${proof.proofId}:${commitment}:${seedForSignature}:${proof.nonce}`;
   const expectedSignature = createHmac('sha256', serverSecret)
     .update(signatureData)
     .digest('hex');
@@ -367,7 +405,8 @@ export function verifySpinResult(proof, commitment, config = {}) {
   return {
     valid: checks.commitmentValid && checks.entropyValid && checks.signatureValid,
     checks,
-    errors
+    errors,
+    testMode
   };
 }
 
@@ -376,6 +415,7 @@ export default {
   generateHouseSeed,
   generateCommitment,
   mixEntropy,
+  generateTestModeEntropy,
   calculateSpinResult,
   generateProof,
   verifySpinResult,
