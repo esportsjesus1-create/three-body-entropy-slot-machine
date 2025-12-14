@@ -287,7 +287,7 @@ export function extendHashChain(
   terminalSeed: string,
   existingLength: number,
   additionalLength: number,
-  algorithm: string = 'sha256'
+  algorithm: 'sha256' | 'sha384' | 'sha512' = 'sha256'
 ): HashChain {
   return generateHashChain({
     terminalSeed,

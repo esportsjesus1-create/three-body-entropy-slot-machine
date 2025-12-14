@@ -11,7 +11,8 @@ import {
   ReelConfiguration,
   SpinResult,
   WinningPayline,
-  EntropyData
+  EntropyData,
+  Payline
 } from './types';
 
 /**

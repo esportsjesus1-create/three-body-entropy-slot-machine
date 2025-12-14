@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
+import { useRef } from 'react';
 import {
   Chart as ChartJS,
   CategoryScale,
   LinearScale,
   BarElement,
+  LineElement,
+  PointElement,
   Title,
   Tooltip,
   Legend,
@@ -11,7 +14,7 @@ import {
 import { Bar } from 'react-chartjs-2';
 import { RefreshCw, BarChart3 } from 'lucide-react';
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
+ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Tooltip, Legend);
 
 interface ThetaDistributionHistogramProps {
   apiEndpoint?: string;

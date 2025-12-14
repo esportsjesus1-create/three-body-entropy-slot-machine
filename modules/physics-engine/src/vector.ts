@@ -124,9 +124,9 @@ export function clone(v: Vector3D): Vector3D {
  */
 export function approximatelyEqual(a: Vector3D, b: Vector3D, tolerance: number = 1e-10): boolean {
   return (
-    Math.abs(a.x - b.x) < tolerance &&
-    Math.abs(a.y - b.y) < tolerance &&
-    Math.abs(a.z - b.z) < tolerance
+    Math.abs(a.x - b.x) <= tolerance &&
+    Math.abs(a.y - b.y) <= tolerance &&
+    Math.abs(a.z - b.z) <= tolerance
   );
 }
 
