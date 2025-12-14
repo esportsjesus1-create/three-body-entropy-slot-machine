@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: three-body-rng-api
+  namespace: ebisu-games-stg
+  labels:
+    app: three-body-rng-api
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+      protocol: TCP
+  selector:
+    app: three-body-rng-api
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: three-body-rng-config
+  namespace: ebisu-games-stg
+data:
+  cors-origin: "https://slot-machine.ebisu-games.com,https://staging.ebisu-games.com"
+---
+# Secret template - actual values should be created via kubectl or sealed secrets
+# kubectl create secret generic three-body-rng-secrets \
+#   --from-literal=database-url='postgresql://user:pass@host:5432/db' \
+#   --from-literal=redis-url='redis://host:6379' \
+#   --from-literal=api-secret-key='your-secret-key' \
+#   -n ebisu-games-stg
+apiVersion: v1
+kind: Secret
+metadata:
+  name: three-body-rng-secrets
+  namespace: ebisu-games-stg
+type: Opaque
+stringData:
+  database-url: "postgresql://10.157.66.3/three_body_rng"
+  redis-url: "redis://10.157.64.3:6379"
+  api-secret-key: "CHANGE_ME_IN_PRODUCTION"

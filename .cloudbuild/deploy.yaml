@@ -1,0 +1,108 @@
+# Cloud Build configuration for Three-Body Entropy RNG API
+# Builds and deploys to GKE cluster
+
+steps:
+  # Step 1: Build Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'us-west1-docker.pkg.dev/${PROJECT_ID}/docker/three-body-rng:${SHORT_SHA}'
+      - '-t'
+      - 'us-west1-docker.pkg.dev/${PROJECT_ID}/docker/three-body-rng:latest'
+      - '-f'
+      - 'Dockerfile'
+      - '.'
+    id: 'build-image'
+
+  # Step 2: Push image to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'us-west1-docker.pkg.dev/${PROJECT_ID}/docker/three-body-rng:${SHORT_SHA}'
+    id: 'push-image-sha'
+    waitFor: ['build-image']
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'us-west1-docker.pkg.dev/${PROJECT_ID}/docker/three-body-rng:latest'
+    id: 'push-image-latest'
+    waitFor: ['build-image']
+
+  # Step 3: Get GKE credentials
+  - name: 'gcr.io/cloud-builders/gcloud'
+    args:
+      - 'container'
+      - 'clusters'
+      - 'get-credentials'
+      - 'w2e-dev'
+      - '--zone'
+      - 'us-west1-a'
+      - '--project'
+      - '${PROJECT_ID}'
+    id: 'get-credentials'
+    waitFor: ['push-image-sha']
+
+  # Step 4: Deploy to GKE
+  - name: 'gcr.io/cloud-builders/kubectl'
+    args:
+      - 'apply'
+      - '-f'
+      - 'kubernetes/'
+      - '-n'
+      - 'ebisu-games-stg'
+    env:
+      - 'CLOUDSDK_COMPUTE_ZONE=us-west1-a'
+      - 'CLOUDSDK_CONTAINER_CLUSTER=w2e-dev'
+    id: 'deploy-kubernetes'
+    waitFor: ['get-credentials']
+
+  # Step 5: Update deployment image
+  - name: 'gcr.io/cloud-builders/kubectl'
+    args:
+      - 'set'
+      - 'image'
+      - 'deployment/three-body-rng-api'
+      - 'api=us-west1-docker.pkg.dev/${PROJECT_ID}/docker/three-body-rng:${SHORT_SHA}'
+      - '-n'
+      - 'ebisu-games-stg'
+    env:
+      - 'CLOUDSDK_COMPUTE_ZONE=us-west1-a'
+      - 'CLOUDSDK_CONTAINER_CLUSTER=w2e-dev'
+    id: 'update-image'
+    waitFor: ['deploy-kubernetes']
+
+  # Step 6: Wait for rollout
+  - name: 'gcr.io/cloud-builders/kubectl'
+    args:
+      - 'rollout'
+      - 'status'
+      - 'deployment/three-body-rng-api'
+      - '-n'
+      - 'ebisu-games-stg'
+      - '--timeout=300s'
+    env:
+      - 'CLOUDSDK_COMPUTE_ZONE=us-west1-a'
+      - 'CLOUDSDK_CONTAINER_CLUSTER=w2e-dev'
+    id: 'wait-rollout'
+    waitFor: ['update-image']
+
+# Images to be pushed
+images:
+  - 'us-west1-docker.pkg.dev/${PROJECT_ID}/docker/three-body-rng:${SHORT_SHA}'
+  - 'us-west1-docker.pkg.dev/${PROJECT_ID}/docker/three-body-rng:latest'
+
+# Build options
+options:
+  machineType: 'E2_HIGHCPU_8'
+  logging: CLOUD_LOGGING_ONLY
+
+# Substitutions
+substitutions:
+  _CLUSTER_NAME: 'w2e-dev'
+  _CLUSTER_ZONE: 'us-west1-a'
+  _NAMESPACE: 'ebisu-games-stg'
+
+# Timeout
+timeout: '1200s'
