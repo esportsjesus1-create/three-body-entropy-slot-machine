@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: three-body-rng-api
-  namespace: ebisu-games-stg
+  namespace: ebisu-prod
   labels:
     app: three-body-rng-api
     version: v1
@@ -106,7 +106,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: three-body-rng-api-hpa
-  namespace: ebisu-games-stg
+  namespace: ebisu-prod
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
