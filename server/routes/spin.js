@@ -13,6 +13,35 @@ import {
   revealSession
 } from '../controllers/sessionController.js';
 
+let signData = null;
+let signingEnabled = false;
+
+// Try to load crypto-signing module
+(async () => {
+  try {
+    const cryptoSigning = await import('../../modules/crypto-signing/dist/index.js');
+    signData = cryptoSigning.signData;
+    signingEnabled = true;
+    console.log('Crypto signing module loaded successfully');
+  } catch (error) {
+    console.warn('Crypto signing module not available:', error.message);
+  }
+})();
+
+// Helper function to sign response data
+const signResponseData = (data) => {
+  if (signingEnabled && signData) {
+    try {
+      const signed = signData(data);
+      return { ...data, ...signed };
+    } catch (error) {
+      console.warn('Failed to sign response:', error.message);
+      return data;
+    }
+  }
+  return data;
+};
+
 const router = Router();
 
 /**
@@ -35,10 +64,11 @@ router.post('/commit',
       const config = req.body.config || {};
       
       const result = await createSession(config);
+      const signedResult = signResponseData(result);
       
       res.status(201).json({
         success: true,
-        data: result
+        data: signedResult
       });
     } catch (error) {
       console.error('Commit error:', error);
@@ -100,10 +130,11 @@ router.post('/reveal',
       const { sessionId, clientSeed = null, config = {} } = req.body;
       
       const result = await revealSession(sessionId, clientSeed, config);
+      const signedResult = signResponseData(result);
       
       res.status(200).json({
         success: true,
-        data: result
+        data: signedResult
       });
     } catch (error) {
       console.error('Reveal error:', error);
@@ -187,14 +218,17 @@ router.post('/quick',
       // Immediately reveal
       const result = await revealSession(session.sessionId, clientSeed, config);
       
+      const responseData = {
+        ...result,
+        warning: testMode 
+          ? 'Test mode: using house entropy only. Not suitable for production.'
+          : 'Quick spin is less secure. Use commit/reveal flow for production.'
+      };
+      const signedResult = signResponseData(responseData);
+      
       res.status(200).json({
         success: true,
-        data: {
-          ...result,
-          warning: testMode 
-            ? 'Test mode: using house entropy only. Not suitable for production.'
-            : 'Quick spin is less secure. Use commit/reveal flow for production.'
-        }
+        data: signedResult
       });
     } catch (error) {
       console.error('Quick spin error:', error);

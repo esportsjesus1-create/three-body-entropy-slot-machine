@@ -15,6 +15,34 @@ import {
   getSessionStats
 } from '../controllers/sessionController.js';
 
+let signData = null;
+let signingEnabled = false;
+
+// Try to load crypto-signing module
+(async () => {
+  try {
+    const cryptoSigning = await import('../../modules/crypto-signing/dist/index.js');
+    signData = cryptoSigning.signData;
+    signingEnabled = true;
+  } catch (error) {
+    console.warn('Crypto signing module not available for verify routes:', error.message);
+  }
+})();
+
+// Helper function to sign response data
+const signResponseData = (data) => {
+  if (signingEnabled && signData) {
+    try {
+      const signed = signData(data);
+      return { ...data, ...signed };
+    } catch (error) {
+      console.warn('Failed to sign response:', error.message);
+      return data;
+    }
+  }
+  return data;
+};
+
 const router = Router();
 
 /**
@@ -56,10 +84,11 @@ router.get('/:sessionId',
     try {
       const { sessionId } = req.params;
       const session = await getSessionForVerification(sessionId);
+      const signedSession = signResponseData(session);
       
       res.status(200).json({
         success: true,
-        data: session
+        data: signedSession
       });
     } catch (error) {
       console.error('Get session error:', error);
@@ -127,10 +156,11 @@ router.post('/:sessionId',
       const clientIp = req.ip || req.headers['x-forwarded-for'];
       
       const result = await verifySession(sessionId, clientIp);
+      const signedResult = signResponseData(result);
       
       res.status(200).json({
         success: true,
-        data: result
+        data: signedResult
       });
     } catch (error) {
       console.error('Verify session error:', error);
@@ -179,16 +209,19 @@ router.get('/',
       
       const history = await getSessionHistory(limit, offset);
       
+      const responseData = {
+        history,
+        pagination: {
+          limit,
+          offset,
+          count: history.length
+        }
+      };
+      const signedData = signResponseData(responseData);
+      
       res.status(200).json({
         success: true,
-        data: {
-          history,
-          pagination: {
-            limit,
-            offset,
-            count: history.length
-          }
-        }
+        data: signedData
       });
     } catch (error) {
       console.error('Get history error:', error);
@@ -212,10 +245,11 @@ router.get('/stats',
   async (req, res) => {
     try {
       const stats = await getSessionStats();
+      const signedStats = signResponseData(stats);
       
       res.status(200).json({
         success: true,
-        data: stats
+        data: signedStats
       });
     } catch (error) {
       console.error('Get stats error:', error);

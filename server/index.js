@@ -16,6 +16,7 @@ import { healthCheck, close } from './config/database.js';
 import { generalLimiter } from './middleware/rateLimit.js';
 import spinRoutes from './routes/spin.js';
 import verifyRoutes from './routes/verify.js';
+import publicKeyRoutes from './routes/publicKey.js';
 
 // Load environment variables
 dotenv.config();
@@ -120,6 +121,7 @@ app.get('/ready', async (req, res) => {
 // API routes
 app.use('/api/v1/spin', spinRoutes);
 app.use('/api/v1/verify', verifyRoutes);
+app.use('/api/v1/public-key', publicKeyRoutes);
 
 // API documentation endpoint
 app.get('/api/v1', (req, res) => {
@@ -134,7 +136,8 @@ app.get('/api/v1', (req, res) => {
       'GET /api/v1/verify/:sessionId': 'Get session data for verification',
       'POST /api/v1/verify/:sessionId': 'Verify spin result',
       'GET /api/v1/verify': 'Get spin history',
-      'GET /api/v1/verify/stats': 'Get statistics'
+      'GET /api/v1/verify/stats': 'Get statistics',
+      'GET /api/v1/public-key': 'Get server public key for signature verification'
     },
     documentation: 'https://github.com/esportsjesus1-create/three-body-entropy-rng'
   });
