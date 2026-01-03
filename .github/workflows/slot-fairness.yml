@@ -1,0 +1,162 @@
+name: Slot Fairness Validation
+
+on:
+  push:
+    branches:
+      - main
+      - 'devin/**'
+  pull_request:
+    branches:
+      - main
+      - 'devin/**'
+
+jobs:
+  slot-fairness-tests:
+    name: Statistical Fairness Tests
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: tests/package-lock.json
+
+      - name: Install dependencies
+        working-directory: tests
+        run: npm ci
+
+      - name: Run Slot Adapter Statistical Tests
+        working-directory: tests
+        run: npm test -- slot-adapter/slot-adapter.test.ts --verbose
+        env:
+          CI: true
+
+      - name: Run Slot Adapter Tests with Coverage
+        working-directory: tests
+        run: npm test -- --coverage slot-adapter/slot-adapter.test.ts
+        continue-on-error: true
+
+      - name: Upload Coverage Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report-${{ matrix.node-version }}
+          path: tests/coverage/
+          retention-days: 7
+
+  rtp-validation:
+    name: RTP Range Validation
+    runs-on: ubuntu-latest
+    needs: slot-fairness-tests
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+          cache-dependency-path: tests/package-lock.json
+
+      - name: Install dependencies
+        working-directory: tests
+        run: npm ci
+
+      - name: Run RTP Validation Tests
+        working-directory: tests
+        run: |
+          npm test -- slot-adapter/slot-adapter.test.ts \
+            --testNamePattern="RTP" \
+            --verbose
+        env:
+          CI: true
+
+  distribution-validation:
+    name: Symbol Distribution Validation
+    runs-on: ubuntu-latest
+    needs: slot-fairness-tests
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+          cache-dependency-path: tests/package-lock.json
+
+      - name: Install dependencies
+        working-directory: tests
+        run: npm ci
+
+      - name: Run Distribution Validation Tests
+        working-directory: tests
+        run: |
+          npm test -- slot-adapter/slot-adapter.test.ts \
+            --testNamePattern="Distribution" \
+            --verbose
+        env:
+          CI: true
+
+  performance-benchmark:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+    needs: slot-fairness-tests
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+          cache-dependency-path: tests/package-lock.json
+
+      - name: Install dependencies
+        working-directory: tests
+        run: npm ci
+
+      - name: Run Performance Benchmark Tests
+        working-directory: tests
+        run: |
+          npm test -- slot-adapter/slot-adapter.test.ts \
+            --testNamePattern="Performance" \
+            --verbose
+        env:
+          CI: true
+
+  summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [slot-fairness-tests, rtp-validation, distribution-validation, performance-benchmark]
+    if: always()
+
+    steps:
+      - name: Check test results
+        run: |
+          echo "Slot Fairness Validation Complete"
+          echo "================================="
+          echo ""
+          echo "All statistical validation tests have been executed."
+          echo "Please review the individual job logs for detailed results."
+          echo ""
+          echo "Key metrics validated:"
+          echo "- Symbol distribution (Chi-square test)"
+          echo "- RTP (Return to Player) percentage"
+          echo "- Randomness quality (Runs test)"
+          echo "- Performance benchmarks"
