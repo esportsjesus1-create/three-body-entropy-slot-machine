@@ -1,0 +1,51 @@
+// Prisma Schema for Audit Trail Module
+// This schema defines the AuditLog model for comprehensive audit logging
+// of game events for compliance and dispute resolution.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Audit log entry for tracking all critical game events
+model AuditLog {
+  /// Unique identifier for the log entry
+  id        String   @id @default(cuid())
+  
+  /// Timestamp when the event occurred
+  timestamp DateTime @default(now())
+  
+  /// Type of event being logged (e.g., COMMITMENT_CREATED, SPIN_EXECUTED)
+  eventType String
+  
+  /// User ID associated with the event (optional)
+  userId    String?
+  
+  /// Session ID associated with the event (optional)
+  sessionId String?
+  
+  /// IP address of the client (optional)
+  ipAddress String?
+  
+  /// Event-specific data payload stored as JSON
+  data      Json
+  
+  /// Cryptographic signature for integrity verification (optional)
+  signature String?
+
+  /// Index for efficient querying by timestamp and event type
+  @@index([timestamp, eventType])
+  
+  /// Index for efficient querying by session ID
+  @@index([sessionId])
+  
+  /// Index for efficient querying by user ID
+  @@index([userId])
+  
+  /// Map to audit_logs table in database
+  @@map("audit_logs")
+}
